@@ -1,0 +1,115 @@
+%%
+% This is an Overleaf template for presentations
+% using the TUM Corporate Desing https://www.tum.de/cd
+%
+% For further details on how to use the template, take a look at our
+% GitLab repository and browse through our test documents
+% https://gitlab.lrz.de/latex4ei/tum-templates.
+%
+% The tumbeamer class is based on the beamer class.
+% If you need further customization please consult the beamer class guide
+% https://ctan.org/pkg/beamer.
+% Additional class options are passed down to the base class.
+%
+% If you encounter any bugs or undesired behaviour, please raise an issue
+% in our GitLab repository
+% https://gitlab.lrz.de/latex4ei/tum-templates/issues
+% and provide a description and minimal working example of your problem.
+%%
+
+
+\documentclass[
+  english,            % define the document language (english, german)
+  aspectratio=169,    % define the aspect ratio (169, 43)
+  % handout=2on1,       % create handout with multiple slides (2on1, 4on1)
+  % partpage=false,     % insert page at beginning of parts (true, false)
+  % sectionpage=true,   % insert page at beginning of sections (true, false)
+]{tumbeamer}
+
+
+% load additional packages
+\usepackage{booktabs}
+
+
+% presentation metadata
+\title{Presentation title}
+\subtitle{Subtitle of the presentation}
+\author{Author Name}
+
+\institute{\theChairName\\\theDepartmentName\\\theUniversityName}
+\date[12/08/2019]{December 8\textsuperscript{th}, 2019}
+
+\footline{\insertauthor~|~\insertshorttitle~|~\insertshortdate}
+
+
+% macro to configure the style of the presentation
+\TUMbeamersetup{
+  title page = TUM tower,         % style of the title page
+  part page = TUM toc,            % style of part pages
+  section page = TUM toc,         % style of section pages
+  content page = TUM more space,  % style of normal content pages
+  tower scale = 1.0,              % scaling factor of TUM tower (if used)
+  headline = TUM threeliner,      % which variation of headline to use
+  footline = TUM default,         % which variation of footline to use
+  % configure on which pages headlines and footlines should be printed
+  headline on = {title page},
+  footline on = {every page, title page=false},
+}
+
+% available frame styles for title page, part page, and section page:
+% TUM default, TUM tower, TUM centered,
+% TUM blue default, TUM blue tower, TUM blue centered,
+% TUM shaded default, TUM shaded tower, TUM shaded centered,
+% TUM flags
+%
+% additional frame styles for part page and section page:
+% TUM toc
+%
+% available frame styles for content pages:
+% TUM default, TUM more space
+%
+% available headline options:
+% TUM empty, TUM oneliner, TUM twoliner, TUM threeliner, TUM logothreeliner
+%
+% available footline options:
+% TUM empty, TUM default, TUM infoline
+
+
+\begin{document}
+
+\maketitle
+
+\section{First Section}
+\begin{frame}{Frame Title}{Subtitle}
+  \begin{itemize}
+    \item This is the first frame.
+    \item It contains some bullet points.
+  \end{itemize}
+\end{frame}
+
+\begin{frame}{Anoter frame of section one}
+  \centering
+  \vfill
+  \begin{tabular}{llcr}
+    \toprule
+    first & second & third & fourth \\
+    \midrule
+    1     & 2      & 3     & 4      \\
+    10    & 20     & 30    & 40     \\
+    100   & 200    & 300   & 400    \\
+    \bottomrule
+  \end{tabular}
+  \vfill
+\end{frame}
+
+\section{Second Section}
+\begin{frame}{Frame of section two}
+  \begin{enumerate}
+    \item one
+    \item two
+    \item three
+    \item four
+  \end{enumerate}
+\end{frame}
+
+\end{document}

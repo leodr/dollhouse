@@ -1,0 +1,55 @@
+[project]
+name = "dollhouse"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Leo Driesch", email = "dev@leodriesch.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "accelerate>=1.15.0",
+    "diffusers",
+    "gradio>=6.28.0",
+    "pillow>=12.3.0",
+    "torch>=2.14.0",
+    "torchvision>=0.29.0",
+    "transformers>=5.17",
+    # TRELLIS.2 (vendor/trellis2) and its CUDA extensions
+    "cumesh",
+    "easydict",
+    "flex-gemm",
+    "kornia",
+    "nvdiffrast",
+    "o-voxel",
+    "opencv-python-headless",
+    "timm",
+    "trimesh",
+    "xformers>=0.0.35",
+    "einops>=0.8.2",
+]
+
+[project.scripts]
+dollhouse = "dollhouse:main"
+
+[build-system]
+requires = ["uv_build>=0.12.1,<0.13.0"]
+build-backend = "uv_build"
+
+[tool.uv.sources]
+diffusers = { git = "https://github.com/huggingface/diffusers" }
+# CuMesh, FlexGEMM and o-voxel need a C++20 patch for torch >= 2.14, so they are
+# built from local checkouts made by scripts/setup-trellis-ext.sh (vendor/ext is
+# a symlink to machine-local disk).
+cumesh = { path = "vendor/ext/CuMesh" }
+flex-gemm = { path = "vendor/ext/FlexGEMM" }
+o-voxel = { path = "vendor/ext/TRELLIS.2/o-voxel" }
+nvdiffrast = { git = "https://github.com/NVlabs/nvdiffrast", tag = "v0.4.0" }
+
+# The CUDA extensions compile against torch; build them against the venv's torch.
+# Needs a CUDA 13 nvcc on PATH and TORCH_CUDA_ARCH_LIST set; see README.
+[tool.uv.extra-build-dependencies]
+cumesh = [{ requirement = "torch", match-runtime = true }, "ninja"]
+flex-gemm = [{ requirement = "torch", match-runtime = true }, "ninja"]
+nvdiffrast = [{ requirement = "torch", match-runtime = true }]
+o-voxel = [{ requirement = "torch", match-runtime = true }, "ninja"]

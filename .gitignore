@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+outputs/
+vendor/ext
+
+# LaTeX build files (main.pdf is kept)
+documentation/**/*.aux
+documentation/**/*.fdb_latexmk
+documentation/**/*.fls
+documentation/**/*.log
+documentation/**/*.nav
+documentation/**/*.out
+documentation/**/*.snm
+documentation/**/*.toc
+documentation/**/*.synctex.gz
