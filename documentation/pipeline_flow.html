@@ -269,7 +269,7 @@ button:focus-visible, .panel summary:focus-visible { outline: 2px solid var(--fo
       desc: "A single photo of a room. The run copies it into the run folder as photo.<ext> and opens it as RGB; every stage reads that copy. Each stage writes its outputs into the run folder and is skipped when they exist, so --run DIR resumes a run and deleting a stage's files reruns it.",
       settings: [["Command", "uv run python -m dollhouse.scene PHOTO [--run DIR]"], ["Run folder", "outputs/scene/<YYYYmmdd-HHMMSS>/"], ["--until", "stop after a stage (default: assemble)"], ["--rewrite", "off by default; enables the rewriter in stage 5"], ["--steps", "40 (Qwen-Image denoising steps)"], ["--seed", "0 (used by rewrite, extract and meshes)"], ["--refit", "redo placement where pose.json exists"]],
       inputs: ["Photo path on the command line"], outputs: ["run/photo.<ext>, opened as RGB H x W x 3"],
-      source: ["scene.py:908-926"] },
+      source: ["scene.py:916-934"] },
 
     { id: "inventory", kind: "model", step: 1, title: "Inventory", sub: "Gemma 4 12B", x: C[1], y: 0,
       desc: "Gemma 4 looks at the photo and lists the object types in it with a count each, as JSON. Only the names go on, as SAM 3 prompts. The counts are compared with SAM 3's instance counts for a log message, and the background list is stored but not used.",
@@ -298,7 +298,7 @@ button:focus-visible, .panel summary:focus-visible { outline: 2px solid var(--fo
       desc: "Back-projects every depth pixel to a 3D point, fits a plane to the floor's points and sets up the world frame: Y up, floor at y = 0, origin on the floor below the camera, camera looking along -Z as in glTF. It is built once, after the meshes, at the start of stage 8.",
       settings: [["Floor mask", "resized to depth resolution (nearest), eroded 2 px"], ["RANSAC", "500 iterations, 2 cm inlier tolerance, seed 0"], ["Refinement", "SVD over all inliers; normal points towards the camera"], ["Minimum", "100 floor points"], ["Fallback", "level camera; floor at the 99th percentile of point heights"], ["X axis", "camera x, projected onto the floor plane"]],
       inputs: ["depth + intrinsics", "floor mask"], outputs: ["World (in memory): rotation, origin, camera height; points in the floor frame"],
-      source: ["scene.py:442-495", "reconstruct.py:86-115", "scene.py:967"] },
+      source: ["scene.py:450-503", "reconstruct.py:86-115", "scene.py:975"] },
 
     { id: "crops", kind: "geo", step: 4, title: "Crops", sub: "red outline", x: C[3], y: 0,
       desc: "Cuts a padded box around each instance and draws the mask's outline in red, so the image model knows which object is meant. A second version fades every other instance towards light grey; retries use it.",
@@ -322,69 +322,69 @@ button:focus-visible, .panel summary:focus-visible { outline: 2px solid var(--fo
     { id: "extract", kind: "model", step: 6, title: "Extract", sub: "Qwen-Image 2.1", x: C[4], y: 0,
       desc: "Qwen-Image 2.1 edits the crop into a standalone picture of the outlined object on a transparent background. All instances are extracted first; the check then marks failures, and those are extracted again with a new seed, a hint appended to the prompt and, from the first retry on, the isolated crop.",
       model: "Qwen/Qwen-Image-2.1",
-      settings: [["Size", "1024 x 1024; with --rewrite about 1 MP at the rewriter's ratio"], ["Steps", "40 (--steps)"], ["Guidance", "none: pipeline default true_cfg_scale = 1.0, no negative prompt"], ["Seed", "--seed + 1000 x attempt, CUDA generator"], ["Input image", "crop.png; crop-isolated.png from attempt 1 on"], ["Attempts", "up to 4 (EXTRACT_ATTEMPTS)"], ["Memory", "bfloat16, model CPU offload, VAE tiles 1024 px with 768 px stride"]],
+      settings: [["Size", "1024 x 1024; with --rewrite about 1 MP at the rewriter's ratio"], ["Steps", "40 (--steps)"], ["Guidance", "none: pipeline default true_cfg_scale = 1.0, no negative prompt"], ["Seed", "--seed + 1000 x attempt, CUDA generator"], ["Input image", "crop.png; crop-isolated.png from attempt 1 on"], ["Attempts", "up to 4 (EXTRACT_ATTEMPTS)"], ["Memory", "bfloat16, no CPU offload: per round, the text encoder alone on the GPU encodes every prompt, then the transformer and VAE generate the images one by one; VAE tiles 1024 px with 768 px stride"]],
       prompts: [
         { label: "EXTRACT_PROMPT ({name} = instance name), or the prompt from stage 5", text: P.extract },
         { label: "RETRY_HINT, appended on retries", text: P.retry }
       ],
       inputs: ["crop.png or crop-isolated.png", "prompt.json"], outputs: ["objects/<id>/extracted.png (RGBA)"],
-      source: ["image_gen.py:7, 25-80", "scene.py:46-50, 60-66", "scene.py:300-324"] },
+      source: ["image_gen.py:9, 27-145", "scene.py:46-50, 60-66", "scene.py:300-332"] },
 
     { id: "check", kind: "model", step: 6, title: "Check", sub: "SAM 3 + alpha", x: C[5], y: 0,
       desc: "Looks for two failures in each extracted image: the red outline drawn into the picture, and more than one object. Objects are counted as separate opaque regions and as separate SAM 3 instances of the name on a white background; the larger count is used. A failed image is deleted together with everything made from it and extracted again.",
       model: "facebook/sam3 (text prompt: the instance name)",
       settings: [["Red outline", "opaque pixels with R > 200, G < 70, B < 70 above 0.2% of opaque pixels"], ["Opaque", "alpha > 128"], ["Regions counted", ">= 30% of the largest and >= 1% of the image"], ["SAM 3 masks counted", ">= 30% of the largest, less than half inside one already counted"], ["Retries", "until 4 attempts; the last one is kept even if it fails"], ["On retry", "deletes extracted.png, subject.png, mesh.glb, pose.json"]],
       inputs: ["extracted.png"], outputs: ["objects/<id>/check.json: attempt, problems, previous"],
-      source: ["scene.py:61-69", "scene.py:326-344", "scene.py:353-382"] },
+      source: ["scene.py:61-69", "scene.py:334-352", "scene.py:361-390"] },
 
     { id: "cutout", kind: "geo", step: 7, title: "Cut-out", sub: "BiRefNet if no alpha", x: C[5], y: 150,
       desc: "Prepares the image for TRELLIS.2. Faint alpha left by Qwen-Image (shadows, edge streaks) is cleared first, because TRELLIS.2 turns it into a ground plate. TRELLIS.2's own preprocessing then crops a square around the object and multiplies colour by alpha. BiRefNet removes the background only if the image has no transparency.",
       model: "ZhengPeng7/BiRefNet, fp32, in place of the gated briaai/RMBG-2.0 named in pipeline.json (used only without alpha)",
       settings: [["Alpha floor", "alpha < 64 set to 0 (MIN_ALPHA)"], ["Downscale", "longer side to at most 1024 px"], ["Crop", "square around pixels with alpha > 0.8 x 255"], ["Output", "RGB premultiplied by alpha (black background)"]],
       inputs: ["extracted.png"], outputs: ["objects/<id>/subject.png"],
-      source: ["mesh_gen.py:17-24, 27-37, 50-55", "vendor/trellis2/pipelines/trellis2_image_to_3d.py:127-162", "scene.py:398-399"] },
+      source: ["mesh_gen.py:17-24, 27-37, 50-55", "vendor/trellis2/pipelines/trellis2_image_to_3d.py:127-162", "scene.py:406-407"] },
 
     { id: "mesh", kind: "model", step: 7, title: "Mesh", sub: "TRELLIS.2-4B", x: C[4], y: 150,
       desc: "TRELLIS.2 turns the cut-out into a textured mesh and exports it as GLB. Meshes are made in worker subprocesses, one after another. A worker stops at its first out-of-memory error, and the next worker retries that object at 512 instead of the 1024 cascade.",
       model: "microsoft/TRELLIS.2-4B (code vendored in vendor/trellis2)",
       settings: [["Pipeline", "1024_cascade; 512 after an out-of-memory error"], ["Seed", "--seed, default 0"], ["Samplers", "12 steps each; guidance 7.5 for structure and shape, 1.0 for texture (HF pipeline.json)"], ["Image features", "facebook/dinov3-vitl16-pretrain-lvd1689m"], ["GLB", "100,000 faces, 1024 px texture, remesh on, WebP textures"], ["Bounds", "unit cube [-0.5, 0.5] before placement"], ["Attention", "xformers (ATTN_BACKEND)"]],
       inputs: ["subject.png"], outputs: ["objects/<id>/mesh.glb", "objects/<id>/mesh.json: resolution, out_of_memory"],
-      source: ["mesh_gen.py:14-21, 39-42, 58-97", "scene.py:79-84", "scene.py:387-437", "scene.py:953-963"] },
+      source: ["mesh_gen.py:14-21, 39-42, 58-97", "scene.py:79-84", "scene.py:395-445", "scene.py:961-971"] },
 
     { id: "place", kind: "geo", step: 8, title: "Place", sub: "fit to depth", x: C[3], y: 150,
       desc: "Fits each mesh to its instance's 3D points with a yaw, a scale and a translation, and at the end a limited stretch per axis. A pose is scored by rendering the mesh's depth from the photo's camera and comparing it with the estimated depth inside the mask, with penalties for uncovered mask pixels, for mesh in front of observed surfaces outside the mask, and for a mesh smaller than the observed points.",
       settings: [["Observed points", "instance pixels at depth resolution (masks eroded up to 2 px), outliers removed; at least 30"], ["Search", "24 yaws x 7 scales (0.5-1.4 x height-based scale), each aligned by ICP: 15 iterations, 3,000 samples, closest 80%"], ["Refinement", "Nelder-Mead from the best 4 yaws >= 45 deg apart, plus the best turned 180 deg"], ["Score", "depth error capped at 10 cm (weight 0.5), uncovered pixel 1, spill > 5 cm (weight 1), size < 90% of observed (weight 5)"], ["Final stretch", "per axis at most 1.6x, penalty weight 0.5"], ["Floor", "lowest point < 15 cm: rests on y = 0; under 6 cm tall: squashed to the observed height"], ["Mesh samples", "20,000 surface points, seed 0"]],
       inputs: ["mesh.glb", "instance masks", "floor frame and points", "likeness per candidate"], outputs: ["objects/<id>/pose.json: 4x4 matrix, yaw, scale, depth RMS, uncovered, spill, candidates, chosen_by"],
-      source: ["scene.py:86-116", "scene.py:503-734", "scene.py:782-821"] },
+      source: ["scene.py:86-116", "scene.py:511-742", "scene.py:790-829"] },
 
     { id: "appearance", kind: "model", step: 8, title: "Appearance", sub: "DINOv3 ViT-L/16", x: C[3], y: 300,
       desc: "Chooses between poses that fit the depth about equally well, such as a box turned by 180 degrees. Each refined candidate is rendered from the photo's camera; photo and render are cropped to the instance, greyed outside its mask and compared patch by patch in DINOv3 features. A candidate close to the best depth score replaces it only if it is clearly more alike.",
       model: "facebook/dinov3-vitl16-pretrain-lvd1689m (bfloat16)",
       settings: [["Crop", "square around the mask + 10% margin, resized to 448 px (28 x 28 patches)"], ["Outside mask", "grey (128, 128, 128) in photo and render"], ["Patches compared", "at least 50% inside the mask"], ["Likeness", "mean cosine similarity of matching patch tokens"], ["Close", "objective <= best x 1.02 + 0.02"], ["Switch", "likeness >= depth-best's + 0.05"], ["Render", "nvdiffrast, photo resolution"], ["VRAM cap", "4 GiB for this process while placing"]],
       inputs: ["candidate pose matrices", "mesh.glb", "photo", "instance mask (photo resolution)"], outputs: ["likeness per candidate (stored in pose.json candidates)"],
-      source: ["scene.py:118-132", "scene.py:665-674", "scene.py:737-779", "render.py:55-102"] },
+      source: ["scene.py:118-132", "scene.py:673-682", "scene.py:745-787", "render.py:55-102"] },
 
     { id: "assemble", kind: "geo", step: 9, title: "Assemble", sub: "trimesh", x: C[4], y: 300,
       desc: "Puts every placed mesh into one glTF scene with a floor quad and the photo's camera, and writes all poses to scene.json. Objects without a pose.json are left out.",
       settings: [["Frame", "metres, Y up, floor at y = 0"], ["Floor quad", "covers floor-level points (y < 5 cm, 1st-99th percentile) and all object footprints, plus 0.3 m"], ["Floor colour", "grey (200, 200, 200)"], ["Camera", "\"photo\": field of view from the DA3 intrinsics, pose from the floor frame"]],
       inputs: ["pose.json and mesh.glb per object", "floor frame and points"], outputs: ["scene.glb", "scene.json: camera pose, fov, resolution, height; every pose.json"],
-      source: ["scene.py:826-864"] },
+      source: ["scene.py:834-872"] },
 
     { id: "renders", kind: "geo", step: 9, title: "Renders", sub: "nvdiffrast", x: C[4], y: 470,
       desc: "Rasterises the assembled scene to check placements by eye: from the photo's camera, alone and over the photo, from the side and from above, then puts them on one sheet.",
       settings: [["Lighting", "one directional light, shade 0.55 + 0.45 x |n . l|"], ["Photo view", "photo resolution and camera"], ["Orbit views", "1200 x 900, 60 deg FOV; side: 70 deg around, 2.5 m up; top: straight down"], ["Clip", "near 0.05 m, far 100 m"], ["Sheet", "photo, photo-camera render, side, top; 450 px tall"]],
       inputs: ["posed meshes and floor", "photo", "photo camera"], outputs: ["render-photo.png, render-overlay.png, render-side.png, render-top.png", "renders.png"],
-      source: ["scene.py:862-863, 867-903", "render.py:55-102"] },
+      source: ["scene.py:870-871, 867-903", "render.py:55-102"] },
 
     { id: "scene", kind: "io", title: "scene.glb", sub: "Y up, metres", x: C[5], y: 300,
       desc: "The result: every placed object mesh, a floor quad and the photo's camera in one glTF file. scene.json next to it holds the camera pose, field of view, resolution and height above the floor, and the content of each object's pose.json.",
       inputs: ["Assemble"], outputs: ["run/scene.glb", "run/scene.json"],
-      source: ["scene.py:854-861"] },
+      source: ["scene.py:862-869"] },
 
     { id: "renderspng", kind: "io", title: "renders.png", sub: "4-panel sheet", x: C[5], y: 470,
       desc: "A sheet of four panels for checking the result: the photo, the scene from the photo's camera, a side view and a top view. The separate views and an overlay on the photo are saved as render-*.png.",
       inputs: ["Renders"], outputs: ["run/renders.png", "run/render-photo.png, render-overlay.png, render-side.png, render-top.png"],
-      source: ["scene.py:867-903"] }
+      source: ["scene.py:875-911"] }
   ];
 
   // Edges: orthogonal polylines with explicit waypoints; label at (lx, ly).

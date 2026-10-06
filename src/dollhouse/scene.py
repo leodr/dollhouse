@@ -302,12 +302,14 @@ def stage_extract(run: Path, instances: list[dict], steps: int, seed: int) -> No
 
     Qwen-Image sometimes extracts the outlined object's neighbours too (a stack of
     boxes, both floor lamps) or keeps the red outline; see check_extraction().
+    Each round first encodes all its prompts, then denoises them, so that the text
+    encoder and the transformer are each loaded once per round.
     """
     for attempt in range(EXTRACT_ATTEMPTS):
         todo = [i for i in instances if not (run / "objects" / i["id"] / "extracted.png").exists()]
-        for n, inst in enumerate(todo):
+        jobs = []  # (instance, prompt, crop, size, seed)
+        for inst in todo:
             folder = run / "objects" / inst["id"]
-            log(f"extract: {n + 1}/{len(todo)} {inst['id']} (Qwen-Image 2.1)")
             record = json.loads((folder / "prompt.json").read_text())
             prompt = record["prompt"]
             size = rewrite.size_for_ratio(record["ratio"], EXTRACT_PIXELS) if record.get("ratio") else EXTRACT_SIZE
@@ -317,11 +319,17 @@ def stage_extract(run: Path, instances: list[dict], steps: int, seed: int) -> No
                 prompt += RETRY_HINT.format(name=inst["name"])
             if tries >= ISOLATE_FROM_ATTEMPT:
                 crop = folder / "crop-isolated.png"
+            jobs.append((inst, prompt, Image.open(crop).convert("RGB"), size, seed + 1000 * tries))
+        if jobs:
+            log(f"extract: encoding {len(jobs)} prompts (Qwen-Image 2.1 text encoder)")
+        encoded = [image_gen.encode(prompt, [crop], size, output_resolution=1024) for _, prompt, crop, size, _ in jobs]
+        for n, ((inst, prompt, crop, size, job_seed), job_encoded) in enumerate(zip(jobs, encoded)):
+            log(f"extract: {n + 1}/{len(jobs)} {inst['id']} (Qwen-Image 2.1)")
             image = image_gen.generate(
-                prompt, [Image.open(crop).convert("RGB")], size,
-                output_resolution=1024, steps=steps, seed=seed + 1000 * tries, on_step=lambda step: None,
+                prompt, [crop], size, output_resolution=1024, steps=steps, seed=job_seed,
+                on_step=lambda step: None, encoded=job_encoded,
             )
-            image.save(folder / "extracted.png")
+            image.save(run / "objects" / inst["id"] / "extracted.png")
 
         unchecked = [i for i in instances if "problems" not in _read_check(run / "objects" / i["id"])]
         if unchecked:
