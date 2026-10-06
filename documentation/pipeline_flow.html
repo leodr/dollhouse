@@ -1,0 +1,801 @@
+<title>Dollhouse Pipeline</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&amp;family=Schibsted+Grotesk:wght@400;500;600;700&amp;display=swap">
+<style>
+/* Layout: .page (16px gutter) holds the header, then .stage: the SVG canvas with an overlay details panel (right side; bottom sheet under 720px). */
+:root {
+  --font-ui: "Schibsted Grotesk", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --bg: #eef2f1;
+  --surface: #f8faf9;
+  --panel: #ffffff;
+  --fg: #17201d;
+  --muted: #55625d;
+  --line: #ccd5d1;
+  --grid: #d5ddda;
+  --edge: #6d7b76;
+  --label-halo: #f8faf9;
+  --group-fill: #e6ecea;
+  --group-line: #94a39d;
+  --model: #3550c4;
+  --model-fill: #e7ebfa;
+  --geo: #9a5f12;
+  --geo-fill: #f6ebd8;
+  --io: #1f7454;
+  --io-fill: #dcefe6;
+  --hi: #b0235f;
+  --focus: #3550c4;
+  --btn: #ffffff;
+  --btn-hover: #e9eeec;
+  --code-bg: #f1f4f3;
+  --shadow: 0 6px 24px #17201d24;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1312;
+    --surface: #141a18;
+    --panel: #19201e;
+    --fg: #e1e9e6;
+    --muted: #95a49e;
+    --line: #2c3633;
+    --grid: #232c29;
+    --edge: #82918b;
+    --label-halo: #141a18;
+    --group-fill: #18201e;
+    --group-line: #4f5e58;
+    --model: #97a9f5;
+    --model-fill: #1d2442;
+    --geo: #e2a95e;
+    --geo-fill: #332710;
+    --io: #67c89f;
+    --io-fill: #11302a;
+    --hi: #f27fb2;
+    --focus: #a4b5ff;
+    --btn: #1d2523;
+    --btn-hover: #26302d;
+    --code-bg: #121816;
+    --shadow: 0 6px 28px #00000080;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1312;
+  --surface: #141a18;
+  --panel: #19201e;
+  --fg: #e1e9e6;
+  --muted: #95a49e;
+  --line: #2c3633;
+  --grid: #232c29;
+  --edge: #82918b;
+  --label-halo: #141a18;
+  --group-fill: #18201e;
+  --group-line: #4f5e58;
+  --model: #97a9f5;
+  --model-fill: #1d2442;
+  --geo: #e2a95e;
+  --geo-fill: #332710;
+  --io: #67c89f;
+  --io-fill: #11302a;
+  --hi: #f27fb2;
+  --focus: #a4b5ff;
+  --btn: #1d2523;
+  --btn-hover: #26302d;
+  --code-bg: #121816;
+  --shadow: 0 6px 28px #00000080;
+  color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--fg); font-family: var(--font-ui); font-size: 14px; line-height: 1.45; }
+.page { padding-inline: 16px; padding-block: 16px 24px; max-width: 1680px; margin: 0 auto; box-sizing: border-box; }
+*, *::before, *::after { box-sizing: border-box; }
+
+.head { display: flex; flex-wrap: wrap; gap: 10px 32px; align-items: flex-end; justify-content: space-between; margin-bottom: 12px; }
+.head h1 { font-size: 22px; font-weight: 700; letter-spacing: -0.01em; margin: 0 0 2px; }
+.head p { margin: 0; color: var(--muted); max-width: 62ch; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 16px; list-style: none; margin: 0; padding: 0; font-size: 13px; color: var(--muted); }
+.legend li { display: flex; align-items: center; gap: 7px; }
+.sw { width: 22px; height: 14px; border: 1.5px solid var(--edge); border-left-width: 5px; border-radius: 2px; flex: none; }
+.sw.model { background: var(--model-fill); border-color: var(--model); }
+.sw.geo { background: var(--geo-fill); border-color: var(--geo); }
+.sw.io { background: var(--io-fill); border-color: var(--io); clip-path: polygon(0 0, 70% 0, 100% 35%, 100% 100%, 0 100%); }
+.sw.loop { background: var(--group-fill); border: 1.5px dashed var(--group-line); }
+.sw.dash { height: 0; border: 0; border-top: 2px dashed var(--edge); border-radius: 0; }
+
+figure.stage { margin: 0; }
+.canvas { position: relative; height: min(78vh, 840px); min-height: 380px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+#flow { display: block; width: 100%; height: 100%; touch-action: none; cursor: grab; user-select: none; -webkit-user-select: none; }
+#flow.grabbing { cursor: grabbing; }
+figcaption { margin-top: 8px; color: var(--muted); font-size: 13px; }
+
+/* diagram */
+.grid-dot { fill: var(--grid); }
+.group-shape { fill: var(--group-fill); stroke: var(--group-line); stroke-width: 1.2; stroke-dasharray: 6 5; }
+.group-label { font: 600 11px var(--font-mono); fill: var(--muted); letter-spacing: 0.06em; }
+.node { cursor: pointer; outline: none; }
+.node .box { stroke-width: 1.5; }
+.node.k-model .box { fill: var(--model-fill); stroke: var(--model); }
+.node.k-geo .box { fill: var(--geo-fill); stroke: var(--geo); }
+.node.k-io .box { fill: var(--io-fill); stroke: var(--io); }
+.node.k-model .stripe { fill: var(--model); }
+.node.k-geo .stripe { fill: var(--geo); }
+.node.k-io .stripe { fill: var(--io); }
+.node.optional .box { stroke-dasharray: 5 4; }
+.n-title { font: 600 14px var(--font-ui); fill: var(--fg); }
+.n-sub { font: 400 11px var(--font-mono); fill: var(--muted); }
+.n-step { font: 500 11px var(--font-mono); fill: var(--muted); }
+.node .ring { fill: none; stroke: none; stroke-width: 2.5; }
+.node:focus-visible .ring { stroke: var(--focus); }
+.node:hover .box { stroke-width: 2.5; }
+.node.sel .box { stroke: var(--hi); stroke-width: 2.8; }
+.node.near .box { stroke-width: 2.4; }
+.edge { cursor: pointer; }
+.edge .line { fill: none; stroke: var(--edge); stroke-width: 1.6; marker-end: url(#arrow); }
+.edge.dashed .line { stroke-dasharray: 6 4; }
+.edge .hit { fill: none; stroke: var(--edge); stroke-opacity: 0; stroke-width: 14; pointer-events: stroke; }
+.edge:hover .line { stroke-width: 2.4; }
+.edge.hi .line { stroke: var(--hi); stroke-width: 2.4; marker-end: url(#arrow-hi); }
+.e-label { font: 500 11px var(--font-ui); fill: var(--muted); paint-order: stroke; stroke: var(--label-halo); stroke-width: 4px; stroke-linejoin: round; }
+.edge.hi .e-label { fill: var(--hi); }
+.arrowhead { fill: var(--edge); }
+.arrowhead-hi { fill: var(--hi); }
+
+/* controls */
+.controls { position: absolute; left: 10px; bottom: 10px; display: flex; gap: 4px; align-items: center; }
+.controls button, .panel button { font: 500 13px var(--font-ui); color: var(--fg); background: var(--btn); border: 1px solid var(--line); border-radius: 4px; cursor: pointer; }
+.controls button { min-width: 34px; height: 34px; padding: 0 9px; }
+.controls button:hover, .panel button:hover { background: var(--btn-hover); }
+button:focus-visible, .panel summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.zoom-read { font: 500 12px var(--font-mono); color: var(--muted); min-width: 46px; text-align: center; background: var(--surface); padding: 2px 4px; border-radius: 3px; }
+
+/* panel */
+.panel { position: absolute; top: 10px; right: 10px; bottom: 10px; width: min(440px, calc(100% - 20px)); overflow: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: var(--shadow); padding: 16px 18px 20px; transition: transform 0.16s ease-out, opacity 0.16s ease-out; overscroll-behavior: contain; }
+.panel-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.kicker { font: 500 12px var(--font-mono); color: var(--muted); margin: 0 0 3px; display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.kicker .dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.dot.model { background: var(--model); } .dot.geo { background: var(--geo); } .dot.io { background: var(--io); } .dot.edge { background: var(--edge); }
+.panel h2 { font-size: 20px; font-weight: 700; margin: 0; letter-spacing: -0.01em; }
+.close { width: 32px; height: 32px; font-size: 18px !important; line-height: 1; flex: none; }
+.panel p.desc { margin: 10px 0 0; }
+.panel h3 { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--muted); margin: 18px 0 6px; }
+.mono { font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.kv { display: grid; grid-template-columns: minmax(96px, 34%) 1fr; gap: 5px 12px; margin: 0; }
+.kv dt { color: var(--muted); font-size: 13px; }
+.kv dd { margin: 0; font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+.prompt { margin-top: 10px; }
+.prompt-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 4px; font-size: 13px; color: var(--muted); }
+.prompt-head button { padding: 3px 10px; font-size: 12px; flex: none; }
+.prompt pre { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 var(--font-mono); background: var(--code-bg); border: 1px solid var(--line); border-left: 3px solid var(--model); border-radius: 3px; padding: 9px 11px; max-height: 340px; overflow: auto; }
+.panel details { margin-top: 10px; }
+.panel summary { cursor: pointer; font-size: 13px; color: var(--muted); }
+.io { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+.io ul { margin: 0; padding-left: 16px; }
+.io li { margin: 2px 0; }
+.src { font-family: var(--font-mono); font-size: 12.5px; color: var(--fg); overflow-wrap: anywhere; margin: 0; }
+.src span { display: block; }
+
+@media (max-width: 720px) {
+  .head h1 { font-size: 20px; }
+  .canvas { height: min(58vh, 520px); min-height: 320px; }
+  .panel { position: fixed; top: auto; left: 0; right: 0; bottom: 0; width: auto; max-height: 64vh; border-radius: 10px 10px 0 0; border-bottom: 0; z-index: 10; padding: 14px 16px 22px; }
+  .io { grid-template-columns: 1fr; }
+  .kv { grid-template-columns: 1fr; gap: 0 0; }
+  .kv dd { margin-bottom: 6px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .panel { transition: none; }
+}
+</style>
+
+<div class="page">
+  <header class="head">
+    <div>
+      <h1>Dollhouse pipeline</h1>
+      <p>One photo of a room becomes a 3D scene: the objects are found, each is extracted as a standalone image, turned into a textured mesh, and placed where it stands in the photo. Read from <span class="mono">src/dollhouse/scene.py</span> at commit 892d6a8.</p>
+    </div>
+    <ul class="legend" aria-label="Legend">
+      <li><span class="sw model"></span>Model inference</li>
+      <li><span class="sw geo"></span>Geometry / CPU</li>
+      <li><span class="sw io"></span>Input / output</li>
+      <li><span class="sw loop"></span>Runs once per object</li>
+      <li><span class="sw dash"></span>Conditional path</li>
+    </ul>
+  </header>
+
+  <figure class="stage">
+    <div class="canvas" id="canvas">
+      <svg id="flow" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Pipeline flow: photo to inventory, masks and depth; per object: crops, prompts, extraction, check, cut-out, mesh, placement; then scene assembly and renders." preserveAspectRatio="xMidYMid meet">
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="9" markerHeight="9" markerUnits="userSpaceOnUse" orient="auto">
+            <path class="arrowhead" d="M0,0.5 L10,5 L0,9.5 Z"></path>
+          </marker>
+          <marker id="arrow-hi" viewBox="0 0 10 10" refX="9.5" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto">
+            <path class="arrowhead-hi" d="M0,0.5 L10,5 L0,9.5 Z"></path>
+          </marker>
+          <pattern id="dots" width="25" height="25" patternUnits="userSpaceOnUse">
+            <circle class="grid-dot" cx="1.5" cy="1.5" r="1.1"></circle>
+          </pattern>
+        </defs>
+        <rect x="-6000" y="-6000" width="12000" height="12000" fill="url(#dots)"></rect>
+        <g id="g-groups"></g>
+        <g id="g-edges"></g>
+        <g id="g-nodes"></g>
+      </svg>
+
+      <div class="controls" role="toolbar" aria-label="Zoom controls">
+        <button type="button" id="zin" aria-label="Zoom in" title="Zoom in">+</button>
+        <button type="button" id="zout" aria-label="Zoom out" title="Zoom out">&#8722;</button>
+        <button type="button" id="zreset" aria-label="Reset to 100 percent" title="100%, start of the flow">1:1</button>
+        <button type="button" id="zfit" aria-label="Fit diagram" title="Fit the whole diagram">Fit</button>
+        <span class="zoom-read" id="zread" aria-live="polite">100%</span>
+      </div>
+
+      <aside class="panel" id="panel" hidden aria-labelledby="p-title">
+        <div class="panel-top">
+          <div>
+            <p class="kicker" id="p-kicker"></p>
+            <h2 id="p-title"></h2>
+          </div>
+          <button type="button" class="close" id="p-close" aria-label="Close details">&#215;</button>
+        </div>
+        <div id="p-body"></div>
+      </aside>
+    </div>
+    <figcaption>Numbers are the stages in scene.py. Each stage runs for every object before the next one starts, because only one model fits in memory at a time. Drag to pan, scroll or pinch to zoom, and select a stage or an arrow for details.</figcaption>
+  </figure>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  const P = {
+ "inventory": "You are given a photo of a scene. List every distinct physical object in it that could be\nseparated out and modeled as its own 3D object.\n\nRules:\n- Work at the level of whole objects (e.g. \"chair\", \"lamp\", \"potted plant\"), not parts\n  (\"chair leg\", \"lampshade\") and not groups (\"furniture\", \"decor\").\n- Use short, concrete noun phrases of 1–3 words, as a segmentation model would expect.\n  Add an attribute only if it is needed to tell two different object types apart\n  (e.g. \"armchair\" vs \"office chair\").\n- One entry per object type. Give the number of visible instances in \"count\".\n- Put structural surfaces (wall, floor, ceiling, window, door) in a separate\n  \"background\" list, not in \"objects\".\n- Skip anything smaller than roughly 1% of the image, and skip reflections, shadows,\n  and objects shown inside pictures or screens.\n- Do not guess. If you are unsure what an object is, use the most generic\n  correct noun (e.g. \"box\", \"container\").\n\nReturn only valid JSON, with no explanation, in exactly this format:\n{\n  \"objects\": [\n    {\"name\": \"sofa\", \"count\": 1},\n    {\"name\": \"cushion\", \"count\": 3}\n  ],\n  \"background\": [\"wall\", \"floor\", \"window\"]\n}",
+ "extract": "Generate a three-quarter view of the {name} outlined in red in this image as a standalone picture with a transparent background.",
+ "retry": " Show exactly one {name}: only the one inside the red outline, without any neighbouring objects, and do not draw the red outline.",
+ "suffix": " It is the {name} outlined in red in the input image, shown on its own without the red outline, without any other objects, floor or shadow, on a fully transparent background.",
+ "drop": "outline|checker|transparen|backdrop|background|shadow|\\bfloor\\b|grid",
+ "floor": "floor",
+ "peSystem": "# Image Prompt Rewriting Expert\n\nYou turn a user's image request into one long English paragraph that describes the\nfinished image as if you were looking at it, plus the aspect ratio it should be\nrendered at. You are not talking to the user and not talking to a renderer: you are\nan observer reporting what is in the frame.\n\nWork through the eight steps below in order. Each step commits one decision; later\nsteps never revise an earlier one.\n\n## Step 1 — Read the brief and split it in two\n\nList what the user has fixed and what they have left open.\n\nFixed, and it must survive into your description unchanged: every string of text\nthey want shown, every named object, every count, every stated colour, every stated\nposition, and the aspect ratio if they gave one. Copy their text strings character\nfor character, in their own script, including punctuation and spacing.\n\nA third thing they may give you is an instruction about the job rather than about the\npicture — \"use double quotes\", \"no hard-edged blocks\", \"4K, no noise\", \"make sure the\ntext is sharp\". That is not content. Obey it silently where it applies and never echo\nit: the description states what is in the frame, never what must be done.\n\nOpen, and you must decide it: everything they did not mention. A three-word request\nand a three-hundred-word request both become a description of the same size, so a\nshort brief means you are inventing most of the frame, not writing less.\n\n## Step 2 — Fix the frame\n\nDecide the orientation from the subject, then pick the ratio.\n\nIf the user states a ratio, use it. Otherwise: `3:2` for anything horizontal and\n`2:3` for anything vertical — these are the two defaults and cover most images.\nUse `1:1` for a square badge, icon, album cover or single centred emblem, `16:9`\nfor a wide cinematic or presentation frame, `1:2` or `9:16` for a phone screen or a\ntall standing banner. `3:4`, `2:1`, `21:9`, `4:3`, `9:21`, `4:5`, `3:1`, `5:4`,\n`1:3` exist but only when the subject or the user really calls for them.\n\nThe ratio lives only in the `wh_ratio` field. Never write a ratio, a resolution, or\na pixel count into the description itself.\n\n## Step 3 — Write the opening sentence\n\nOne sentence, around twenty words. Name the medium, the style, the subject, and the\nbackground or palette; usually name the orientation too:\n\n`The image is a ⟨vertical / wide / square / tall⟩ ⟨style⟩ ⟨photograph · poster · illustration · scene · portrait · infographic · close-up · graphic · page · card · sheet · logo⟩ of ⟨subject⟩, ⟨the background and its palette⟩.`\n\n`This is a …` or a bare `A vertical realistic photograph of …` work equally well. The\nmedium noun is the one part that is never omitted.\n\nThe style word goes here — realistic, photorealistic, minimalist, flat-vector,\ncinematic, watercolour, isometric, editorial, hand-drawn, 3D-rendered, retro. Name\nit once here; you may echo it in the closing sentence.\n\n## Step 4 — Inventory before you write\n\nBefore any more prose, settle two lists.\n\nEvery element that will appear, each with a place in the frame: upper-left,\nacross the top, on the far right, in the lower-third, in the centre, in front of,\nbehind, tucked into the corner. You will need eight to fourteen such positional\nphrases, about ten typically, and they must reach the corners, the edges and the\ncentre — not cluster in the middle.\n\nEvery piece of text that will be legible in the image, in reading order.\n\n## Step 5 — Walk the frame\n\nNow describe it in order. Which order depends on how the frame is filled.\n\n**If the frame is divided into regions** — a poster, a page, an interface, a layout, a\nwide scene with several things in it — walk the regions:\n\n1. The background and the surface it sits on — this comes immediately after the\n   opening sentence, not at the end.\n2. The top band: headline, header bar, sky, ceiling, whatever occupies the top edge.\n3. Down and across the body of the frame: left side, then centre, then right side.\n   Give each region one or two sentences.\n4. The bottom band: footer, foreground, ground plane, base row.\n\n**If one subject fills the frame** — a portrait, a close-up, a single object — walk\nthe subject instead: the background and how far it falls off, then the subject's pose\nand where it is placed in the frame, then head and face, then body and each garment or\nsurface, then what is held or touching it, then whatever little is left at the edges.\nKeep using positional phrases inside the subject — in the upper-left of the frame,\nbehind the left shoulder, along the lower edge — so the frame stays locatable.\n\nRoughly a third of your sentences should open on the positional phrase itself —\n\"On the right side of the frame, …\", \"In the upper-left corner, …\", \"Across the\nlower third, …\" — so the reader always knows where they are looking.\n\nKeep it to one paragraph. Break to a new paragraph only when the image is genuinely\nbuilt from stacked regions — panels, cards, sections, slides — and then one\nparagraph per region, each opening on where that region sits.\n\n## Step 6 — Set every piece of text\n\nSkip this step if nothing in the image is meant to be read — a third of images have\nno legible text at all, and inventing signage for them is a mistake.\n\nOtherwise, for each string from your Step 4 list, in reading order, name where it sits,\nwhat it looks like, and what it says: `a bold black headline across the top reads \"…\"`.\n\nPut the string in straight double quotes, in its own script — Chinese, Russian,\nKorean, Japanese and Arabic text stays in Chinese, Russian, Korean, Japanese and\nArabic. Give its weight, colour, case and relative size. Describe a line break as a\nsecond line rather than putting a real newline inside the string. If a mark is not meant\nto be read — distant signage, a label behind glass, dense body copy — call it\nblurred, indistinct, or too small to read rather than inventing letters. If the image contains a chart\nor a table, its axes, tick labels, legend entries, series and cell values are text\ntoo: write them out.\n\n## Step 7 — Give the lighting its own sentence\n\nEvery image has light in it, and the description always accounts for it: the source,\nits direction, its quality, and the shadows and highlights it leaves. Soft diffused\ndaylight from a window on the left, hard overhead studio light, warm low sun, flat\neven ambient light for a diagram.\n\nOnce the contents are placed, give it a sentence of its own — `The lighting is …` —\nor, if the light is what makes a particular surface look the way it does, fold it into\nthat surface's sentence. Either way it is stated explicitly, not left implied.\n\n## Step 8 — Close with the whole frame\n\nEnd on a single sentence that steps back:\n\n`The overall composition ⟨is / uses / feels⟩ …`\n\n`The composition is …`, `The overall design …`, `The overall mood …`, `The overall\npalette …` and `The image has …` are the same move. Cover balance and symmetry, the\npalette, the style, and the mood in that one sentence. Write exactly one such\nsentence — do not follow it with a second summary.\n\n## Throughout\n\n**Size.** The description runs about twenty sentences and four to five hundred words,\nroughly twenty-five words a sentence. That is the same size whether the brief was three\nwords or three hundred: a dense frame with many regions and a lot of text runs longer, a\nsingle quiet subject runs shorter, but a thin brief never buys a thin description.\n\n**Observe, don't instruct.** Present tense, third person, declarative. No \"you\", no\n\"create\", no \"make sure\", no \"the AI should\". No quality boosters — no \"masterpiece\",\n\"8K\", \"highly detailed\", \"award-winning\".\n\n**Hedge what you cannot be certain of.** An observer describing a picture says\n\"appears to be\", \"likely\", \"suggesting\", and offers a pair — \"a notebook\nor a tablet\", \"wood or dark laminate\" — when the thing is genuinely ambiguous. Do\nthis often; it is the natural register here. Be flatly definite only about what the\nuser fixed.\n\n**Name colours with a modifier, almost never bare.** Deep navy, muted olive, pale\ncream, warm terracotta, soft dusty rose, blue-grey, off-white, charcoal, brownish-\ngreen. Hex codes only if the user gave them.\n\n**Give the material, not just the noun.** Brushed metal, matte plastic, glossy\nceramic, coarse linen, weathered wood, frosted glass, grain, scuffs, condensation,\nvisible brush strokes, paper fibre.\n\n**Enumerate; never summarise.** \"Several items\" and \"various decorations\" are not\ndescriptions. Say what each thing is. Write small counts as words — three, five,\ntwelve — and if something is partly hidden, say so and describe the visible part.\n\n**People get their observable surface.** Build, posture, where they are looking,\nexpression, hair, skin tone, and each garment with its colour and material. Age is a\nlife stage or a decade — a child, a teenager, a young adult, middle-aged, elderly,\nin her thirties — never a number of years. If a face is turned away or cropped, say\nthat instead of describing it.\n\n**Objects by class, not by brand.** A silver laptop, a mirrorless camera, a compact\nhatchback — unless the user named the brand. Photographic and design vocabulary is\nwelcome: shallow depth of field, bokeh, backlit, close-up, negative space,\ngrid, drop shadow.\n\n**Everything holds together physically.** Shadows fall away from the light, reflections\nmatch what is in front of the surface, scale is consistent between neighbouring\nobjects, and a surface reacts to what sits on it. If the user asked for something\nimpossible, describe it as the image shows it and let the rest of the scene stay\ncoherent around it.\n\n## Language\n\nThe description is always in English, whatever language the request arrives in. The\nonly exception is text shown inside the image, which stays in its own script.\n\n## Output format\n\nReturn one strictly valid JSON object on a single line, nothing before or after:\n\n{\"rewritten_prompt\": \"<the description>\", \"wh_ratio\": \"<e.g. 3:2>\"}",
+ "peSource": "HF snapshot f3ed798, 10,044 bytes"
+};
+
+  const NS = "http://www.w3.org/2000/svg";
+  const W = 164, H = 60;
+  const C = [0, 250, 500, 750, 1000, 1250];
+  const KIND = { model: "Model inference", geo: "Geometry / CPU", io: "Input / output" };
+
+  // Nodes: x, y are centres in diagram units.
+  const NODES = [
+    { id: "photo", kind: "io", title: "Photo", sub: "input image", x: C[0], y: 75,
+      desc: "A single photo of a room. The run copies it into the run folder as photo.<ext> and opens it as RGB; every stage reads that copy. Each stage writes its outputs into the run folder and is skipped when they exist, so --run DIR resumes a run and deleting a stage's files reruns it.",
+      settings: [["Command", "uv run python -m dollhouse.scene PHOTO [--run DIR]"], ["Run folder", "outputs/scene/<YYYYmmdd-HHMMSS>/"], ["--until", "stop after a stage (default: assemble)"], ["--rewrite", "off by default; enables the rewriter in stage 5"], ["--steps", "40 (Qwen-Image denoising steps)"], ["--seed", "0 (used by rewrite, extract and meshes)"], ["--refit", "redo placement where pose.json exists"]],
+      inputs: ["Photo path on the command line"], outputs: ["run/photo.<ext>, opened as RGB H x W x 3"],
+      source: ["scene.py:908-926"] },
+
+    { id: "inventory", kind: "model", step: 1, title: "Inventory", sub: "Gemma 4 12B", x: C[1], y: 0,
+      desc: "Gemma 4 looks at the photo and lists the object types in it with a count each, as JSON. Only the names go on, as SAM 3 prompts. The counts are compared with SAM 3's instance counts for a log message, and the background list is stored but not used.",
+      model: "google/gemma-4-12B-it",
+      settings: [["dtype", "bfloat16, device_map=\"cuda\""], ["Image tokens", "max_soft_tokens = 1120 (model range 70-1120, default 280)"], ["Decoding", "greedy, do_sample=False"], ["max_new_tokens", "2048"], ["Thinking", "enable_thinking=False"], ["Parsing", "first ```json block, else outermost {...}; names lowercased, counts of repeated names summed"]],
+      prompts: [{ label: "User message: the photo, then INVENTORY_PROMPT", text: P.inventory }],
+      inputs: ["photo (full resolution)"], outputs: ["inventory.json: objects {name: count}, background [names], raw answer"],
+      source: ["detect.py:10-42 (model id, prompt)", "detect.py:55-89 (load, generate)", "detect.py:138-153 (parse)", "scene.py:145-155"] },
+
+    { id: "masks", kind: "model", step: 2, title: "Masks", sub: "SAM 3", x: C[2], y: 0,
+      desc: "SAM 3 finds every instance of each inventory name, with one forward pass per text prompt, and the floor. Floor instances are merged into one floor mask. Very small instances are dropped, and when two different prompts claim the same object the lower-scoring mask is dropped.",
+      model: "facebook/sam3",
+      settings: [["Prompts", "each inventory name, then \"floor\""], ["Score threshold", "0.5"], ["Mask size", "photo resolution (target_sizes = original size)"], ["Min area", "0.0002 of the image (MIN_AREA)"], ["Duplicates", "different prompts, IoU > 0.85: keep the higher score"], ["dtype", "not set (checkpoint default), cuda"], ["Instance ids", "NN-name, numbered by descending score"]],
+      prompts: [{ label: "Floor prompt (FLOOR_PROMPT); the object prompts are the inventory names, e.g. \"sofa\"", text: P.floor }],
+      inputs: ["photo", "object names from inventory.json"], outputs: ["masks.npz: masks N x H x W bool, floor H x W bool", "instances.json: id, name, score, box, area", "masks.png overlay"],
+      source: ["segment.py:9-11, 40-52", "scene.py:45, 71-75", "scene.py:160-214"] },
+
+    { id: "depth", kind: "model", step: 3, title: "Depth", sub: "Depth Anything 3", x: C[1], y: 150,
+      desc: "Depth Anything 3 estimates metric depth and the camera intrinsics from the single photo. Other models are released first, and DA3 is loaded for this one call and deleted after it.",
+      model: "depth-anything/DA3NESTED-GIANT-LARGE-1.1 (code vendored in vendor/depth_anything_3)",
+      settings: [["process_res", "504"], ["process_res_method", "upper_bound_resize (DA3 default)"], ["Output grid", "DA3's processed resolution, not the photo's"], ["Units", "metres"], ["Device", "cuda, eval mode"]],
+      inputs: ["photo"], outputs: ["depth.npz: depth H x W (m), intrinsics 3 x 3, image H x W x 3 at depth resolution"],
+      source: ["reconstruct.py:32, 52-59", "scene.py:230-240"] },
+
+    { id: "world", kind: "geo", step: 8, title: "Floor frame", sub: "RANSAC plane", x: C[2], y: 150,
+      desc: "Back-projects every depth pixel to a 3D point, fits a plane to the floor's points and sets up the world frame: Y up, floor at y = 0, origin on the floor below the camera, camera looking along -Z as in glTF. It is built once, after the meshes, at the start of stage 8.",
+      settings: [["Floor mask", "resized to depth resolution (nearest), eroded 2 px"], ["RANSAC", "500 iterations, 2 cm inlier tolerance, seed 0"], ["Refinement", "SVD over all inliers; normal points towards the camera"], ["Minimum", "100 floor points"], ["Fallback", "level camera; floor at the 99th percentile of point heights"], ["X axis", "camera x, projected onto the floor plane"]],
+      inputs: ["depth + intrinsics", "floor mask"], outputs: ["World (in memory): rotation, origin, camera height; points in the floor frame"],
+      source: ["scene.py:442-495", "reconstruct.py:86-115", "scene.py:967"] },
+
+    { id: "crops", kind: "geo", step: 4, title: "Crops", sub: "red outline", x: C[3], y: 0,
+      desc: "Cuts a padded box around each instance and draws the mask's outline in red, so the image model knows which object is meant. A second version fades every other instance towards light grey; retries use it.",
+      settings: [["Padding", "25% of the box's longer side, every side (CROP_PAD), clipped to the photo"], ["Outline", "RGB (255, 0, 0), max(2, round(longer crop side / 200)) px wide"], ["Isolated crop", "other instances blended to (235, 235, 235) at strength 0.75"], ["Resolution", "photo pixels, not resized"]],
+      inputs: ["photo", "instance mask and box"], outputs: ["objects/<id>/crop.png", "objects/<id>/crop-isolated.png"],
+      source: ["scene.py:58, 65-68, 76-77", "scene.py:245-273"] },
+
+    { id: "prompts", kind: "model", optional: true, step: 5, title: "Prompts", sub: "PE-T2I if --rewrite", x: C[3] + 125, y: -150,
+      desc: "Writes the extraction prompt for each instance to prompt.json. By default that is the template with the instance name filled in. With --rewrite, Qwen-Image-2.1-PE-T2I reads the crop and that prompt, reasons in a <think> block, and returns a detailed prompt and an aspect ratio. Sentences about outlines, backgrounds, shadows or the floor are then removed and a fixed suffix is appended, because Qwen-Image drew what the rewriter described.",
+      model: "Qwen/Qwen-Image-2.1-PE-T2I (only with --rewrite)",
+      settings: [["Default", "off; prompt = extraction prompt unchanged"], ["dtype", "bfloat16, device_map=\"cuda\""], ["Sampling", "temperature 1.0, top_p 0.95, top_k 20 (model card)"], ["max_new_tokens", "8192"], ["Thinking", "enable_thinking=True"], ["Seed", "torch.manual_seed(--seed), default 0"], ["Fallback", "unchanged prompt, no ratio, if the answer is not the expected JSON"], ["Size from ratio", "about 1024 x 1024 px, sides rounded to multiples of 32"]],
+      prompts: [
+        { label: "User message: crop.png, then the extraction prompt (EXTRACT_PROMPT, {name} filled in)", text: P.extract },
+        { label: "REWRITE_DROP: sentences matching this case-insensitive regex are removed", text: P.drop },
+        { label: "REWRITE_SUFFIX: appended after the kept sentences", text: P.suffix },
+        { label: "System prompt: system_prompt.txt from the model's HF repo, loaded at runtime (" + P.peSource + ")", text: P.peSystem, collapsed: true }
+      ],
+      inputs: ["crop.png (only with --rewrite)", "instance name"], outputs: ["objects/<id>/prompt.json: instruction, prompt; with --rewrite also rewritten, ratio (w:h), raw"],
+      source: ["rewrite.py:17-31 (model, system prompt)", "rewrite.py:38-79", "scene.py:51-57", "scene.py:278-295"] },
+
+    { id: "extract", kind: "model", step: 6, title: "Extract", sub: "Qwen-Image 2.1", x: C[4], y: 0,
+      desc: "Qwen-Image 2.1 edits the crop into a standalone picture of the outlined object on a transparent background. All instances are extracted first; the check then marks failures, and those are extracted again with a new seed, a hint appended to the prompt and, from the first retry on, the isolated crop.",
+      model: "Qwen/Qwen-Image-2.1",
+      settings: [["Size", "1024 x 1024; with --rewrite about 1 MP at the rewriter's ratio"], ["Steps", "40 (--steps)"], ["Guidance", "none: pipeline default true_cfg_scale = 1.0, no negative prompt"], ["Seed", "--seed + 1000 x attempt, CUDA generator"], ["Input image", "crop.png; crop-isolated.png from attempt 1 on"], ["Attempts", "up to 4 (EXTRACT_ATTEMPTS)"], ["Memory", "bfloat16, model CPU offload, VAE tiles 1024 px with 768 px stride"]],
+      prompts: [
+        { label: "EXTRACT_PROMPT ({name} = instance name), or the prompt from stage 5", text: P.extract },
+        { label: "RETRY_HINT, appended on retries", text: P.retry }
+      ],
+      inputs: ["crop.png or crop-isolated.png", "prompt.json"], outputs: ["objects/<id>/extracted.png (RGBA)"],
+      source: ["image_gen.py:7, 25-80", "scene.py:46-50, 60-66", "scene.py:300-324"] },
+
+    { id: "check", kind: "model", step: 6, title: "Check", sub: "SAM 3 + alpha", x: C[5], y: 0,
+      desc: "Looks for two failures in each extracted image: the red outline drawn into the picture, and more than one object. Objects are counted as separate opaque regions and as separate SAM 3 instances of the name on a white background; the larger count is used. A failed image is deleted together with everything made from it and extracted again.",
+      model: "facebook/sam3 (text prompt: the instance name)",
+      settings: [["Red outline", "opaque pixels with R > 200, G < 70, B < 70 above 0.2% of opaque pixels"], ["Opaque", "alpha > 128"], ["Regions counted", ">= 30% of the largest and >= 1% of the image"], ["SAM 3 masks counted", ">= 30% of the largest, less than half inside one already counted"], ["Retries", "until 4 attempts; the last one is kept even if it fails"], ["On retry", "deletes extracted.png, subject.png, mesh.glb, pose.json"]],
+      inputs: ["extracted.png"], outputs: ["objects/<id>/check.json: attempt, problems, previous"],
+      source: ["scene.py:61-69", "scene.py:326-344", "scene.py:353-382"] },
+
+    { id: "cutout", kind: "geo", step: 7, title: "Cut-out", sub: "BiRefNet if no alpha", x: C[5], y: 150,
+      desc: "Prepares the image for TRELLIS.2. Faint alpha left by Qwen-Image (shadows, edge streaks) is cleared first, because TRELLIS.2 turns it into a ground plate. TRELLIS.2's own preprocessing then crops a square around the object and multiplies colour by alpha. BiRefNet removes the background only if the image has no transparency.",
+      model: "ZhengPeng7/BiRefNet, fp32, in place of the gated briaai/RMBG-2.0 named in pipeline.json (used only without alpha)",
+      settings: [["Alpha floor", "alpha < 64 set to 0 (MIN_ALPHA)"], ["Downscale", "longer side to at most 1024 px"], ["Crop", "square around pixels with alpha > 0.8 x 255"], ["Output", "RGB premultiplied by alpha (black background)"]],
+      inputs: ["extracted.png"], outputs: ["objects/<id>/subject.png"],
+      source: ["mesh_gen.py:17-24, 27-37, 50-55", "vendor/trellis2/pipelines/trellis2_image_to_3d.py:127-162", "scene.py:398-399"] },
+
+    { id: "mesh", kind: "model", step: 7, title: "Mesh", sub: "TRELLIS.2-4B", x: C[4], y: 150,
+      desc: "TRELLIS.2 turns the cut-out into a textured mesh and exports it as GLB. Meshes are made in worker subprocesses, one after another. A worker stops at its first out-of-memory error, and the next worker retries that object at 512 instead of the 1024 cascade.",
+      model: "microsoft/TRELLIS.2-4B (code vendored in vendor/trellis2)",
+      settings: [["Pipeline", "1024_cascade; 512 after an out-of-memory error"], ["Seed", "--seed, default 0"], ["Samplers", "12 steps each; guidance 7.5 for structure and shape, 1.0 for texture (HF pipeline.json)"], ["Image features", "facebook/dinov3-vitl16-pretrain-lvd1689m"], ["GLB", "100,000 faces, 1024 px texture, remesh on, WebP textures"], ["Bounds", "unit cube [-0.5, 0.5] before placement"], ["Attention", "xformers (ATTN_BACKEND)"]],
+      inputs: ["subject.png"], outputs: ["objects/<id>/mesh.glb", "objects/<id>/mesh.json: resolution, out_of_memory"],
+      source: ["mesh_gen.py:14-21, 39-42, 58-97", "scene.py:79-84", "scene.py:387-437", "scene.py:953-963"] },
+
+    { id: "place", kind: "geo", step: 8, title: "Place", sub: "fit to depth", x: C[3], y: 150,
+      desc: "Fits each mesh to its instance's 3D points with a yaw, a scale and a translation, and at the end a limited stretch per axis. A pose is scored by rendering the mesh's depth from the photo's camera and comparing it with the estimated depth inside the mask, with penalties for uncovered mask pixels, for mesh in front of observed surfaces outside the mask, and for a mesh smaller than the observed points.",
+      settings: [["Observed points", "instance pixels at depth resolution (masks eroded up to 2 px), outliers removed; at least 30"], ["Search", "24 yaws x 7 scales (0.5-1.4 x height-based scale), each aligned by ICP: 15 iterations, 3,000 samples, closest 80%"], ["Refinement", "Nelder-Mead from the best 4 yaws >= 45 deg apart, plus the best turned 180 deg"], ["Score", "depth error capped at 10 cm (weight 0.5), uncovered pixel 1, spill > 5 cm (weight 1), size < 90% of observed (weight 5)"], ["Final stretch", "per axis at most 1.6x, penalty weight 0.5"], ["Floor", "lowest point < 15 cm: rests on y = 0; under 6 cm tall: squashed to the observed height"], ["Mesh samples", "20,000 surface points, seed 0"]],
+      inputs: ["mesh.glb", "instance masks", "floor frame and points", "likeness per candidate"], outputs: ["objects/<id>/pose.json: 4x4 matrix, yaw, scale, depth RMS, uncovered, spill, candidates, chosen_by"],
+      source: ["scene.py:86-116", "scene.py:503-734", "scene.py:782-821"] },
+
+    { id: "appearance", kind: "model", step: 8, title: "Appearance", sub: "DINOv3 ViT-L/16", x: C[3], y: 300,
+      desc: "Chooses between poses that fit the depth about equally well, such as a box turned by 180 degrees. Each refined candidate is rendered from the photo's camera; photo and render are cropped to the instance, greyed outside its mask and compared patch by patch in DINOv3 features. A candidate close to the best depth score replaces it only if it is clearly more alike.",
+      model: "facebook/dinov3-vitl16-pretrain-lvd1689m (bfloat16)",
+      settings: [["Crop", "square around the mask + 10% margin, resized to 448 px (28 x 28 patches)"], ["Outside mask", "grey (128, 128, 128) in photo and render"], ["Patches compared", "at least 50% inside the mask"], ["Likeness", "mean cosine similarity of matching patch tokens"], ["Close", "objective <= best x 1.02 + 0.02"], ["Switch", "likeness >= depth-best's + 0.05"], ["Render", "nvdiffrast, photo resolution"], ["VRAM cap", "4 GiB for this process while placing"]],
+      inputs: ["candidate pose matrices", "mesh.glb", "photo", "instance mask (photo resolution)"], outputs: ["likeness per candidate (stored in pose.json candidates)"],
+      source: ["scene.py:118-132", "scene.py:665-674", "scene.py:737-779", "render.py:55-102"] },
+
+    { id: "assemble", kind: "geo", step: 9, title: "Assemble", sub: "trimesh", x: C[4], y: 300,
+      desc: "Puts every placed mesh into one glTF scene with a floor quad and the photo's camera, and writes all poses to scene.json. Objects without a pose.json are left out.",
+      settings: [["Frame", "metres, Y up, floor at y = 0"], ["Floor quad", "covers floor-level points (y < 5 cm, 1st-99th percentile) and all object footprints, plus 0.3 m"], ["Floor colour", "grey (200, 200, 200)"], ["Camera", "\"photo\": field of view from the DA3 intrinsics, pose from the floor frame"]],
+      inputs: ["pose.json and mesh.glb per object", "floor frame and points"], outputs: ["scene.glb", "scene.json: camera pose, fov, resolution, height; every pose.json"],
+      source: ["scene.py:826-864"] },
+
+    { id: "renders", kind: "geo", step: 9, title: "Renders", sub: "nvdiffrast", x: C[4], y: 470,
+      desc: "Rasterises the assembled scene to check placements by eye: from the photo's camera, alone and over the photo, from the side and from above, then puts them on one sheet.",
+      settings: [["Lighting", "one directional light, shade 0.55 + 0.45 x |n . l|"], ["Photo view", "photo resolution and camera"], ["Orbit views", "1200 x 900, 60 deg FOV; side: 70 deg around, 2.5 m up; top: straight down"], ["Clip", "near 0.05 m, far 100 m"], ["Sheet", "photo, photo-camera render, side, top; 450 px tall"]],
+      inputs: ["posed meshes and floor", "photo", "photo camera"], outputs: ["render-photo.png, render-overlay.png, render-side.png, render-top.png", "renders.png"],
+      source: ["scene.py:862-863, 867-903", "render.py:55-102"] },
+
+    { id: "scene", kind: "io", title: "scene.glb", sub: "Y up, metres", x: C[5], y: 300,
+      desc: "The result: every placed object mesh, a floor quad and the photo's camera in one glTF file. scene.json next to it holds the camera pose, field of view, resolution and height above the floor, and the content of each object's pose.json.",
+      inputs: ["Assemble"], outputs: ["run/scene.glb", "run/scene.json"],
+      source: ["scene.py:854-861"] },
+
+    { id: "renderspng", kind: "io", title: "renders.png", sub: "4-panel sheet", x: C[5], y: 470,
+      desc: "A sheet of four panels for checking the result: the photo, the scene from the photo's camera, a side view and a top view. The separate views and an overlay on the photo are saved as render-*.png.",
+      inputs: ["Renders"], outputs: ["run/renders.png", "run/render-photo.png, render-overlay.png, render-side.png, render-top.png"],
+      source: ["scene.py:867-903"] }
+  ];
+
+  // Edges: orthogonal polylines with explicit waypoints; label at (lx, ly).
+  const EDGES = [
+    { id: "e1", from: "photo", to: "inventory", label: "photo", pts: [[82, 62], [125, 62], [125, 0], [168, 0]], lx: 146, ly: -7, desc: "The full-resolution RGB photo, sent as the image in Gemma's chat message." },
+    { id: "e2", from: "photo", to: "depth", label: "photo", pts: [[82, 88], [125, 88], [125, 150], [168, 150]], lx: 146, ly: 143, desc: "The RGB photo. DA3 resizes it to its processing resolution." },
+    { id: "e3", from: "photo", to: "masks", label: "RGB photo", pts: [[0, 45], [0, -75], [500, -75], [500, -30]], lx: 250, ly: -82, desc: "The RGB photo at full resolution; SAM 3's masks come back at the same size." },
+    { id: "e4", from: "photo", to: "crops", label: "photo", pts: [[0, 45], [0, -75], [710, -75], [710, -30]], lx: 630, ly: -82, desc: "The RGB photo, cut to each instance's padded box." },
+    { id: "e5", from: "inventory", to: "masks", label: "object names", pts: [[332, 0], [418, 0]], lx: 375, ly: -7, desc: "The names in inventory.json become SAM 3 text prompts. The counts are only compared with SAM 3's instance counts for a log message." },
+    { id: "e6", from: "masks", to: "crops", label: "masks, boxes", pts: [[582, 0], [668, 0]], lx: 625, ly: -7, desc: "masks.npz (N x H x W bool) and the boxes in instances.json." },
+    { id: "e7", from: "masks", to: "world", label: "floor mask", pts: [[470, 30], [470, 120]], lx: 463, ly: 79, anchor: "end", desc: "The floor mask: the union of all \"floor\" instances, H x W bool at photo resolution." },
+    { id: "e8", from: "masks", to: "place", label: "instance masks", pts: [[540, 30], [540, 75], [720, 75], [720, 120]], lx: 630, ly: 69, desc: "All instance masks. Placement turns them into a label map at depth resolution: masks eroded up to 2 px, and where masks overlap the higher score wins." },
+    { id: "e9", from: "depth", to: "world", label: "depth, K", pts: [[332, 150], [418, 150]], lx: 375, ly: 143, desc: "depth.npz: H x W metric depth and the 3 x 3 intrinsics." },
+    { id: "e10", from: "world", to: "place", label: "3D points", pts: [[582, 150], [668, 150]], lx: 625, ly: 143, desc: "The World object: every depth pixel as a 3D point in the floor frame, and the camera projection used to render candidate depths." },
+    { id: "e11", from: "crops", to: "prompts", label: "crop.png", dashed: true, pts: [[805, -30], [805, -120]], lx: 798, ly: -88, anchor: "end", desc: "Only with --rewrite: crop.png goes to the rewriter together with the extraction prompt." },
+    { id: "e12", from: "prompts", to: "extract", label: "prompt.json", pts: [[945, -120], [945, -30]], lx: 952, ly: -88, anchor: "start", desc: "prompt.json: the prompt to use, and with --rewrite the aspect ratio that sets the output size." },
+    { id: "e13", from: "crops", to: "extract", label: "crop.png", pts: [[832, 0], [918, 0]], lx: 875, ly: -7, desc: "crop.png on the first attempt, crop-isolated.png on retries." },
+    { id: "e14", from: "extract", to: "check", label: "RGBA image", pts: [[1082, 0], [1168, 0]], lx: 1125, ly: -7, desc: "extracted.png, RGBA." },
+    { id: "e15", from: "check", to: "extract", label: "retry: new seed, hint", dashed: true, pts: [[1210, -30], [1210, -75], [1040, -75], [1040, -30]], lx: 1125, ly: -82, desc: "When the check finds a problem, extracted.png and everything made from it is deleted. The next pass uses seed + 1000 x attempt, appends RETRY_HINT and uses crop-isolated.png. At most 4 attempts in total." },
+    { id: "e16", from: "check", to: "cutout", label: "RGBA image", pts: [[1250, 30], [1250, 120]], lx: 1257, ly: 79, anchor: "start", desc: "extracted.png from the last attempt: one that passed, or the fourth attempt kept despite its problems." },
+    { id: "e17", from: "cutout", to: "mesh", label: "subject.png", pts: [[1168, 150], [1082, 150]], lx: 1125, ly: 143, desc: "subject.png: a square RGB crop of the object, premultiplied by alpha." },
+    { id: "e18", from: "mesh", to: "place", label: "mesh.glb", pts: [[918, 136], [832, 136]], lx: 875, ly: 129, desc: "mesh.glb; placement samples 20,000 surface points from it." },
+    { id: "e19", from: "place", to: "assemble", label: "pose.json", pts: [[832, 166], [875, 166], [875, 300], [918, 300]], lx: 882, ly: 240, anchor: "start", desc: "pose.json per object: a 4 x 4 matrix (yaw, per-axis scale, translation) that places mesh.glb in the floor frame." },
+    { id: "e20", from: "place", to: "appearance", label: "candidates", pts: [[725, 180], [725, 270]], lx: 718, ly: 229, anchor: "end", desc: "The refined candidate poses, as 4 x 4 matrices." },
+    { id: "e21", from: "appearance", to: "place", label: "likeness", pts: [[775, 270], [775, 180]], lx: 782, ly: 229, anchor: "start", desc: "One likeness score per candidate, or none if the mask covers no whole patch." },
+    { id: "e22", from: "world", to: "assemble", label: "camera, floor points", pts: [[500, 180], [500, 400], [970, 400], [970, 330]], lx: 600, ly: 393, desc: "The camera pose and field of view for the scene's camera, and the floor-level points that size the floor quad." },
+    { id: "e23", from: "assemble", to: "scene", label: "glTF + JSON", pts: [[1082, 300], [1168, 300]], lx: 1125, ly: 293, desc: "scene.glb and scene.json." },
+    { id: "e24", from: "assemble", to: "renders", label: "posed meshes", pts: [[1030, 330], [1030, 440]], lx: 1037, ly: 389, anchor: "start", desc: "Every placed mesh with its base-colour texture, plus the floor quad." },
+    { id: "e25", from: "renders", to: "renderspng", label: "4 views", pts: [[1082, 470], [1168, 470]], lx: 1125, ly: 463, desc: "renders.png and the separate render-*.png files." }
+  ];
+
+  const GROUP = { pts: [[645, -232], [1355, -232], [1355, 205], [845, 205], [845, 355], [645, 355]], label: "PER OBJECT: ONCE FOR EVERY SAM 3 INSTANCE", lx: 659, ly: -212 };
+  const BB = { x: -100, y: -248, w: 1470, h: 766 };
+
+  const byId = {};
+  NODES.forEach(n => { byId[n.id] = n; });
+
+  const svg = document.getElementById("flow");
+  const canvas = document.getElementById("canvas");
+  const panel = document.getElementById("panel");
+  const pBody = document.getElementById("p-body");
+  const pTitle = document.getElementById("p-title");
+  const pKicker = document.getElementById("p-kicker");
+  const zread = document.getElementById("zread");
+
+  function el(tag, attrs, parent) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  function roundedPath(pts, r) {
+    let d = "M" + pts[0][0] + "," + pts[0][1];
+    for (let i = 1; i < pts.length - 1; i++) {
+      const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], [x2, y2] = pts[i + 1];
+      const l1 = Math.hypot(x1 - x0, y1 - y0), l2 = Math.hypot(x2 - x1, y2 - y1);
+      const rr = Math.min(r, l1 / 2, l2 / 2);
+      const ax = x1 - (x1 - x0) / l1 * rr, ay = y1 - (y1 - y0) / l1 * rr;
+      const bx = x1 + (x2 - x1) / l2 * rr, by = y1 + (y2 - y1) / l2 * rr;
+      d += " L" + ax + "," + ay + " Q" + x1 + "," + y1 + " " + bx + "," + by;
+    }
+    const last = pts[pts.length - 1];
+    return d + " L" + last[0] + "," + last[1];
+  }
+
+  // ---- draw
+  const gGroups = document.getElementById("g-groups");
+  const gEdges = document.getElementById("g-edges");
+  const gNodes = document.getElementById("g-nodes");
+
+  el("path", { class: "group-shape", d: "M" + GROUP.pts.map(p => p.join(",")).join(" L") + " Z" }, gGroups);
+  el("text", { class: "group-label", x: GROUP.lx, y: GROUP.ly }, gGroups).textContent = GROUP.label;
+
+  const edgeEls = {};
+  EDGES.forEach(e => {
+    const g = el("g", { class: "edge" + (e.dashed ? " dashed" : ""), "data-edge": e.id }, gEdges);
+    const d = roundedPath(e.pts, 9);
+    el("path", { class: "hit", d: d }, g);
+    el("path", { class: "line", d: d }, g);
+    const t = el("text", { class: "e-label", x: e.lx, y: e.ly, "text-anchor": e.anchor || "middle" }, g);
+    t.textContent = e.label;
+    el("title", {}, g).textContent = byId[e.from].title + " to " + byId[e.to].title + ": " + e.label;
+    edgeEls[e.id] = g;
+  });
+
+  const nodeEls = {};
+  NODES.forEach(n => {
+    const g = el("g", {
+      class: "node k-" + n.kind + (n.optional ? " optional" : ""), "data-node": n.id, tabindex: "0", role: "button",
+      "aria-label": n.title + ", " + n.sub + ". " + KIND[n.kind] + ". Open details.",
+      transform: "translate(" + (n.x - W / 2) + "," + (n.y - H / 2) + ")"
+    }, gNodes);
+    el("rect", { class: "ring", x: -5, y: -5, width: W + 10, height: H + 10, rx: 6 }, g);
+    if (n.kind === "io") {
+      el("path", { class: "box", d: "M0,0 H" + (W - 14) + " L" + W + ",14 V" + H + " H0 Z" }, g);
+    } else {
+      el("rect", { class: "box", x: 0, y: 0, width: W, height: H, rx: 3 }, g);
+    }
+    el("rect", { class: "stripe", x: 0, y: 0, width: 5, height: H }, g);
+    el("text", { class: "n-title", x: 16, y: 26 }, g).textContent = n.title;
+    el("text", { class: "n-sub", x: 16, y: 45 }, g).textContent = n.sub;
+    if (n.step) el("text", { class: "n-step", x: W - 9, y: 17, "text-anchor": "end" }, g).textContent = n.step;
+    nodeEls[n.id] = g;
+  });
+
+  // ---- view box, zoom and pan
+  const MIN_K = 0.12, MAX_K = 4;
+  let vb = { x: BB.x, y: BB.y, w: BB.w, h: BB.h };
+  let touched = false;
+
+  function box() {
+    const r = svg.getBoundingClientRect();
+    return { w: Math.max(r.width, 1), h: Math.max(r.height, 1), left: r.left, top: r.top };
+  }
+  function k() { return box().w / vb.w; }
+  function apply() {
+    svg.setAttribute("viewBox", vb.x + " " + vb.y + " " + vb.w + " " + vb.h);
+    zread.textContent = Math.round(k() * 100) + "%";
+  }
+  function setScale(s, ux, uy, px, py) {
+    const b = box();
+    s = Math.min(MAX_K, Math.max(MIN_K, s));
+    vb.w = b.w / s; vb.h = b.h / s;
+    vb.x = ux - px / s; vb.y = uy - py / s;
+    apply();
+  }
+  function fit() {
+    const b = box();
+    const s = Math.min(b.w / BB.w, b.h / BB.h);
+    vb.w = b.w / s; vb.h = b.h / s;
+    vb.x = BB.x + BB.w / 2 - vb.w / 2; vb.y = BB.y + BB.h / 2 - vb.h / 2;
+    apply();
+  }
+  function reset() {
+    const b = box();
+    vb.w = b.w; vb.h = b.h;
+    vb.x = BB.x; vb.y = Math.max(BB.y, Math.min(75 - b.h / 2, BB.y + BB.h - b.h));
+    if (b.h >= BB.h) vb.y = BB.y + BB.h / 2 - b.h / 2;
+    apply();
+  }
+  function zoomBy(f, px, py) {
+    const b = box();
+    if (px === undefined) { px = b.w / 2; py = b.h / 2; }
+    const s = k();
+    setScale(s * f, vb.x + px / s, vb.y + py / s, px, py);
+  }
+
+  svg.addEventListener("wheel", e => {
+    e.preventDefault();
+    touched = true;
+    const b = box();
+    const unit = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? b.h : 1;
+    const rate = e.ctrlKey ? 0.01 : 0.0015;
+    zoomBy(Math.exp(-e.deltaY * unit * rate), e.clientX - b.left, e.clientY - b.top);
+  }, { passive: false });
+
+  const pointers = new Map();
+  let downTarget = null, moved = false, start = null, pinch = null;
+
+  function pinchState() {
+    const [a, c] = Array.from(pointers.values());
+    return { d: Math.hypot(a.x - c.x, a.y - c.y), mx: (a.x + c.x) / 2, my: (a.y + c.y) / 2 };
+  }
+
+  svg.addEventListener("pointerdown", e => {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    try { svg.setPointerCapture(e.pointerId); } catch (err) { /* ignore */ }
+    if (pointers.size === 1) {
+      downTarget = e.target; moved = false; start = { x: e.clientX, y: e.clientY };
+    } else if (pointers.size === 2) {
+      moved = true; pinch = pinchState();
+    }
+  });
+  svg.addEventListener("pointermove", e => {
+    if (!pointers.has(e.pointerId)) return;
+    const prev = pointers.get(e.pointerId);
+    pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pointers.size === 1) {
+      if (!moved && Math.hypot(e.clientX - start.x, e.clientY - start.y) > 5) {
+        moved = true; svg.classList.add("grabbing");
+      }
+      if (moved) {
+        touched = true;
+        const s = k();
+        vb.x -= (e.clientX - prev.x) / s; vb.y -= (e.clientY - prev.y) / s;
+        apply();
+      }
+    } else if (pointers.size === 2 && pinch) {
+      touched = true;
+      const now = pinchState(), b = box(), s = k();
+      const ux = vb.x + (pinch.mx - b.left) / s, uy = vb.y + (pinch.my - b.top) / s;
+      setScale(s * (now.d / Math.max(pinch.d, 1)), ux, uy, now.mx - b.left, now.my - b.top);
+      pinch = now;
+    }
+  });
+  function endPointer(e, cancelled) {
+    if (!pointers.has(e.pointerId)) return;
+    pointers.delete(e.pointerId);
+    if (pointers.size < 2) pinch = null;
+    if (pointers.size === 1) {
+      const rest = Array.from(pointers.values())[0];
+      start = { x: rest.x, y: rest.y };
+    }
+    if (pointers.size === 0) {
+      svg.classList.remove("grabbing");
+      if (!moved && !cancelled && downTarget) tap(downTarget);
+      downTarget = null;
+    }
+  }
+  svg.addEventListener("pointerup", e => endPointer(e, false));
+  svg.addEventListener("pointercancel", e => endPointer(e, true));
+
+  document.getElementById("zin").addEventListener("click", () => { touched = true; zoomBy(1.25); });
+  document.getElementById("zout").addEventListener("click", () => { touched = true; zoomBy(0.8); });
+  document.getElementById("zreset").addEventListener("click", () => { touched = true; reset(); });
+  document.getElementById("zfit").addEventListener("click", () => { touched = true; fit(); });
+
+  let lastW = null;
+  const ro = new ResizeObserver(() => {
+    const b = box();
+    if (lastW === null || !touched) { fit(); }
+    else {
+      const s = lastW / vb.w;
+      const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2;
+      vb.w = b.w / s; vb.h = b.h / s; vb.x = cx - vb.w / 2; vb.y = cy - vb.h / 2;
+      apply();
+    }
+    lastW = b.w;
+  });
+  ro.observe(svg);
+  fit();
+
+  // ---- selection and panel
+  let selected = null, lastFocus = null;
+
+  function tap(target) {
+    const n = target.closest && target.closest("[data-node]");
+    if (n) { openNode(n.getAttribute("data-node"), false); return; }
+    const e = target.closest && target.closest("[data-edge]");
+    if (e) { openEdge(e.getAttribute("data-edge")); return; }
+    closePanel();
+  }
+
+  function clearMarks() {
+    svg.querySelectorAll(".sel, .near, .hi").forEach(x => x.classList.remove("sel", "near", "hi"));
+  }
+
+  function h(tag, cls, text) {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text !== undefined) e.textContent = text;
+    return e;
+  }
+
+  function kicker(kind, text) {
+    pKicker.textContent = "";
+    pKicker.appendChild(h("span", "dot " + kind));
+    pKicker.appendChild(document.createTextNode(text));
+  }
+
+  function selectText(node) {
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(range);
+  }
+
+  function promptBlock(p) {
+    const wrap = h("div", "prompt");
+    const head = h("div", "prompt-head");
+    head.appendChild(h("span", "", p.label));
+    const btn = h("button", "", "Copy");
+    btn.type = "button";
+    const pre = h("pre", "", p.text);
+    btn.addEventListener("click", () => {
+      const done = msg => { btn.textContent = msg; setTimeout(() => { btn.textContent = "Copy"; }, 1600); };
+      const fallback = () => { selectText(pre); done("Selected"); };
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(pre.textContent).then(() => done("Copied"), fallback);
+      } else { fallback(); }
+    });
+    head.appendChild(btn);
+    wrap.appendChild(head);
+    wrap.appendChild(pre);
+    if (p.collapsed) {
+      const det = h("details");
+      const sum = h("summary", "", "Show " + p.label.split(":")[0].toLowerCase() + " (" + p.text.length.toLocaleString("en") + " characters)");
+      det.appendChild(sum);
+      det.appendChild(wrap);
+      head.firstChild.textContent = p.label.slice(p.label.indexOf(":") + 2);
+      return det;
+    }
+    return wrap;
+  }
+
+  function list(items) {
+    const ul = h("ul");
+    items.forEach(t => ul.appendChild(h("li", "", t)));
+    return ul;
+  }
+
+  function showPanel() {
+    const wasHidden = panel.hidden;
+    panel.hidden = false;
+    panel.scrollTop = 0;
+    if (wasHidden) lastFocus = document.activeElement;
+  }
+
+  function openNode(id, fromKey) {
+    const n = byId[id];
+    clearMarks();
+    selected = { type: "node", id: id };
+    nodeEls[id].classList.add("sel");
+    EDGES.forEach(e => { if (e.from === id || e.to === id) edgeEls[e.id].classList.add("hi"); });
+
+    kicker(n.kind, KIND[n.kind] + (n.step ? "  /  stage " + n.step : ""));
+    pTitle.textContent = n.title;
+    pBody.textContent = "";
+    pBody.appendChild(h("p", "desc", n.desc));
+    if (n.model) {
+      pBody.appendChild(h("h3", "", "Model"));
+      pBody.appendChild(h("p", "mono", n.model));
+    }
+    if (n.settings && n.settings.length) {
+      pBody.appendChild(h("h3", "", "Key settings"));
+      const dl = h("dl", "kv");
+      n.settings.forEach(([a, b]) => { dl.appendChild(h("dt", "", a)); dl.appendChild(h("dd", "", b)); });
+      pBody.appendChild(dl);
+    }
+    if (n.prompts && n.prompts.length) {
+      pBody.appendChild(h("h3", "", n.prompts.length > 1 ? "Prompts" : "Prompt"));
+      n.prompts.forEach(p => pBody.appendChild(promptBlock(p)));
+    }
+    const io = h("div", "io");
+    const a = h("div"), b = h("div");
+    a.appendChild(h("h3", "", "Inputs")); a.appendChild(list(n.inputs));
+    b.appendChild(h("h3", "", "Outputs")); b.appendChild(list(n.outputs));
+    io.appendChild(a); io.appendChild(b);
+    pBody.appendChild(io);
+    pBody.appendChild(h("h3", "", "Source (src/dollhouse/)"));
+    const src = h("p", "src");
+    n.source.forEach(s => src.appendChild(h("span", "", s)));
+    pBody.appendChild(src);
+    showPanel();
+    reveal(n.x, n.y);
+    if (fromKey) document.getElementById("p-close").focus({ preventScroll: true });
+  }
+
+  function openEdge(id) {
+    const e = EDGES.find(x => x.id === id);
+    clearMarks();
+    selected = { type: "edge", id: id };
+    edgeEls[id].classList.add("hi");
+    nodeEls[e.from].classList.add("near");
+    nodeEls[e.to].classList.add("near");
+    kicker("edge", "Data flow" + (e.dashed ? "  /  conditional" : ""));
+    pTitle.textContent = e.label;
+    pBody.textContent = "";
+    pBody.appendChild(h("p", "desc", e.desc));
+    const dl = h("dl", "kv");
+    dl.appendChild(h("dt", "", "From")); dl.appendChild(h("dd", "", byId[e.from].title));
+    dl.appendChild(h("dt", "", "To")); dl.appendChild(h("dd", "", byId[e.to].title));
+    pBody.appendChild(h("h3", "", "Connects"));
+    pBody.appendChild(dl);
+    showPanel();
+  }
+
+  function closePanel() {
+    if (panel.hidden) return;
+    panel.hidden = true;
+    clearMarks();
+    const back = selected && selected.type === "node" ? nodeEls[selected.id] : lastFocus;
+    selected = null;
+    if (back && back.focus && document.activeElement && panel.contains(document.activeElement)) back.focus({ preventScroll: true });
+  }
+
+  // Pan so a node is not hidden behind the panel or outside the view.
+  function reveal(x, y) {
+    const b = box();
+    let visW = b.w, visH = b.h;
+    if (!panel.hidden) {
+      const pr = panel.getBoundingClientRect();
+      if (getComputedStyle(panel).position === "fixed") visH = Math.max(140, Math.min(b.h, pr.top - b.top));
+      else visW = Math.max(160, pr.left - b.left);
+    }
+    const s = k();
+    const sx = (x - vb.x) * s, sy = (y - vb.y) * s;
+    const mx = W * s / 2 + 24, my = H * s / 2 + 24;
+    let dx = 0, dy = 0;
+    if (visW < 2 * mx) dx = sx - visW / 2;
+    else if (sx < mx) dx = sx - mx;
+    else if (sx > visW - mx) dx = sx - (visW - mx);
+    if (visH < 2 * my) dy = sy - visH / 2;
+    else if (sy < my) dy = sy - my;
+    else if (sy > visH - my) dy = sy - (visH - my);
+    if (dx || dy) { vb.x += dx / s; vb.y += dy / s; apply(); }
+  }
+
+  gNodes.addEventListener("keydown", e => {
+    const n = e.target.closest("[data-node]");
+    if (!n) return;
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openNode(n.getAttribute("data-node"), true); }
+  });
+  gNodes.addEventListener("focusin", e => {
+    const n = e.target.closest("[data-node]");
+    if (n && n.matches(":focus-visible")) { const d = byId[n.getAttribute("data-node")]; reveal(d.x, d.y); }
+  });
+  document.getElementById("p-close").addEventListener("click", closePanel);
+  document.addEventListener("keydown", e => { if (e.key === "Escape" && !panel.hidden) { e.preventDefault(); closePanel(); } });
+})();
+</script>

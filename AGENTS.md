@@ -11,6 +11,11 @@ Lab (Prof. Nießner), TUM.
 Update presentations are in `documentation/update_presentations/`, one folder per date, with the
 LaTeX template in `template/`.
 
+`documentation/pipeline_flow.html` is an interactive flow diagram of the pipeline (stages, models,
+settings and verbatim prompts, read from `src/dollhouse/`, excluding the Gradio app). Keep it up to
+date: whenever a change to the pipeline adds, removes or reorders a stage, or changes a model id,
+prompt or setting shown in a node panel, update the diagram in the same commit.
+
 ## Git
 
 - One-line commit messages only — no body text.
