@@ -13,6 +13,34 @@ DEFAULT_PROMPT = "detect all objects"
 # is tuned for classification; localization benefits from more detail.
 IMAGE_TOKENS = 1120
 
+# Lists the scene's objects by name, for the segmentation model to find.
+INVENTORY_PROMPT = """\
+You are given a photo of a scene. List every distinct physical object in it that could be
+separated out and modeled as its own 3D object.
+
+Rules:
+- Work at the level of whole objects (e.g. "chair", "lamp", "potted plant"), not parts
+  ("chair leg", "lampshade") and not groups ("furniture", "decor").
+- Use short, concrete noun phrases of 1–3 words, as a segmentation model would expect.
+  Add an attribute only if it is needed to tell two different object types apart
+  (e.g. "armchair" vs "office chair").
+- One entry per object type. Give the number of visible instances in "count".
+- Put structural surfaces (wall, floor, ceiling, window, door) in a separate
+  "background" list, not in "objects".
+- Skip anything smaller than roughly 1% of the image, and skip reflections, shadows,
+  and objects shown inside pictures or screens.
+- Do not guess. If you are unsure what an object is, use the most generic
+  correct noun (e.g. "box", "container").
+
+Return only valid JSON, with no explanation, in exactly this format:
+{
+  "objects": [
+    {"name": "sofa", "count": 1},
+    {"name": "cushion", "count": 3}
+  ],
+  "background": ["wall", "floor", "window"]
+}"""
+
 # Distinct, readable colours; labels are assigned in order of first appearance.
 PALETTE = ["#e6194b", "#3cb44b", "#4363d8", "#f58231", "#911eb4", "#46f0f0",
            "#f032e6", "#bcf60c", "#008080", "#9a6324", "#800000", "#000075"]
@@ -99,3 +127,27 @@ def draw(image: Image.Image, detections: list[Detection]) -> Image.Image:
         draw.rectangle((x1, label_top, x1 + (tx2 - tx1) + 2 * pad, label_top + (ty2 - ty1) + 2 * pad), fill=color)
         draw.text((x1 + pad, label_top + pad - (ty1 - y1)), det.label, fill="white", font=font)
     return out
+
+
+@dataclass
+class Inventory:
+    objects: dict[str, int]  # name -> visible instance count
+    background: list[str]
+
+
+def inventory(image: Image.Image) -> tuple[Inventory, str]:
+    """The scene's object types, from INVENTORY_PROMPT; also returns the raw answer."""
+    text = run(image, INVENTORY_PROMPT, max_new_tokens=2048)
+    match = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL)
+    payload = match.group(1) if match else text[text.find("{"): text.rfind("}") + 1]
+    try:
+        data = json.loads(payload)
+    except json.JSONDecodeError:
+        data = {}
+    objects = {}
+    for item in data.get("objects", []) if isinstance(data, dict) else []:
+        if isinstance(item, dict) and str(item.get("name", "")).strip():
+            name = str(item["name"]).strip().lower()
+            objects[name] = objects.get(name, 0) + int(item.get("count") or 1)
+    background = [str(b).strip().lower() for b in (data.get("background", []) if isinstance(data, dict) else [])]
+    return Inventory(objects, [b for b in background if b]), text

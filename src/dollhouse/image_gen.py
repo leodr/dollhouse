@@ -5,6 +5,10 @@ from PIL import Image
 from dollhouse import models
 
 MODEL_ID = "Qwen/Qwen-Image-2.1"
+DEFAULT_PROMPT = (
+    "Generate a three-quarter view of the couch from this image as a standalone picture "
+    "with a transparent background."
+)
 
 # Resolutions recommended on the model card (the ~4 MP set).
 ASPECT_RATIOS = {

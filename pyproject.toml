@@ -27,6 +27,12 @@ dependencies = [
     "trimesh",
     "xformers>=0.0.35",
     "einops>=0.8.2",
+    # Depth Anything 3 (vendor/depth_anything_3)
+    "addict>=2.4.0",
+    "omegaconf>=2.3.1",
+    "imageio>=2.37.4",
+    "matplotlib>=3.11.2",
+    "scipy>=1.18.1",
 ]
 
 [project.scripts]

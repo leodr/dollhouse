@@ -19,6 +19,9 @@ MODEL_ID = "microsoft/TRELLIS.2-4B"
 REMBG_MODEL_ID = "ZhengPeng7/BiRefNet"
 
 PIPELINE_TYPES = {"512": "512", "1024": "1024_cascade", "1536": "1536_cascade"}
+# Qwen-Image's RGBA output keeps faint shadows and edge streaks at alpha 1-20, which
+# TRELLIS.2 turns into a ground plate under the object; alpha below this is cleared.
+MIN_ALPHA = 64
 
 
 def _load():
@@ -45,7 +48,10 @@ def get_pipeline():
 
 
 def remove_background(image: Image.Image) -> Image.Image:
-    """Cut out and center the subject; images that already have alpha keep it."""
+    """Cut out and center the subject; images that already have alpha keep it, minus faint alpha."""
+    if image.mode == "RGBA":
+        r, g, b, a = image.split()
+        image = Image.merge("RGBA", (r, g, b, a.point(lambda v: 0 if v < MIN_ALPHA else v)))
     return get_pipeline().preprocess_image(image)
 
 

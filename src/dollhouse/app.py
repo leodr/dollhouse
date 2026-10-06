@@ -6,12 +6,14 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 import random
 import time
+from collections import Counter
 from pathlib import Path
 
 import gradio as gr
+import numpy as np
 import torch
 
-from dollhouse import detect, image_gen, mesh_gen
+from dollhouse import detect, image_gen, mesh_gen, segment
 
 OUTPUT_DIR = Path(__file__).resolve().parents[2] / "outputs"
 MAX_SEED = 2**31 - 1
@@ -44,6 +46,32 @@ def detect_objects(image, prompt, progress=gr.Progress()):
         gr.Warning("The model's answer contained no bounding boxes; see the raw output.")
     rows = [[d.label, *d.box] for d in detections]
     return detect.draw(image, detections), rows, text
+
+
+def segment_objects(image, prompts_text, threshold, progress=gr.Progress()):
+    if image is None:
+        raise gr.Error("Add an input image.")
+    prompts = segment.parse_prompts(prompts_text or "")
+    if not prompts:
+        raise gr.Error("Enter at least one prompt.")
+
+    progress(0, desc="Loading SAM 3")
+    try:
+        instances = segment.run(image, prompts, threshold)
+    except torch.OutOfMemoryError:
+        raise gr.Error("Out of GPU memory. Try a smaller image.")
+
+    counts = Counter()
+    annotations, rows = [], []
+    for inst in instances:
+        counts[inst.label] += 1
+        name = f"{inst.label} {counts[inst.label]}"
+        annotations.append((inst.mask.astype(np.float32), name))
+        rows.append([name, round(inst.score, 2), round(float(100 * inst.mask.mean()), 1)])
+    missing = [p for p in prompts if p not in counts]
+    if missing:
+        gr.Warning(f"Nothing above the threshold for: {', '.join(missing)}")
+    return (image, annotations), rows
 
 
 def generate_image(prompt, gallery, aspect_ratio, size, steps, seed, randomize_seed, progress=gr.Progress()):
@@ -139,6 +167,27 @@ def build_ui() -> gr.Blocks:
                         with gr.Accordion("Raw model output", open=False):
                             detect_text = gr.Textbox(show_label=False, lines=8)
 
+            with gr.Tab("Masking", id="mask"):
+                gr.Markdown(
+                    "SAM 3. Masks every instance of each prompt. Separate prompts with commas; "
+                    "short noun phrases work best, e.g. `couch, floor lamp`. "
+                    "Hover over a mask or its legend entry to highlight it."
+                )
+                with gr.Row():
+                    with gr.Column():
+                        mask_in = gr.Image(label="Input image", type="pil", image_mode="RGB", height=420)
+                        mask_prompts = gr.Textbox(label="Prompts", value=segment.DEFAULT_PROMPTS, lines=2)
+                        mask_threshold = gr.Slider(
+                            0.05, 0.95, value=segment.DEFAULT_THRESHOLD, step=0.05, label="Score threshold",
+                            info="Lower finds more instances, including wrong ones.",
+                        )
+                        run_mask = gr.Button("Segment", variant="primary")
+                    with gr.Column():
+                        mask_out = gr.AnnotatedImage(label="Masks", height=420)
+                        mask_table = gr.Dataframe(
+                            headers=["instance", "score", "area %"], label="Instances", interactive=False,
+                        )
+
             with gr.Tab("Image", id="image"):
                 gr.Markdown(
                     "Qwen-Image 2.1. Text only generates an image from the prompt. "
@@ -146,7 +195,7 @@ def build_ui() -> gr.Blocks:
                 )
                 with gr.Row():
                     with gr.Column():
-                        prompt = gr.Textbox(label="Prompt", lines=4)
+                        prompt = gr.Textbox(label="Prompt", value=image_gen.DEFAULT_PROMPT, lines=4)
                         gallery = gr.Gallery(
                             label="Input images (optional)",
                             type="pil",
@@ -200,6 +249,12 @@ def build_ui() -> gr.Blocks:
             detect_objects,
             inputs=[detect_in, detect_prompt],
             outputs=[detect_out, detect_table, detect_text],
+            **GPU_QUEUE,
+        )
+        run_mask.click(
+            segment_objects,
+            inputs=[mask_in, mask_prompts, mask_threshold],
+            outputs=[mask_out, mask_table],
             **GPU_QUEUE,
         )
         run_image.click(

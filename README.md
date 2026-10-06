@@ -33,3 +33,19 @@ ssh -L 7860:localhost:7860 <host>   # from your laptop
 ```
 
 Results are saved to `outputs/` (images) and `outputs/3d/` (GLB files), on the NFS home, which has a quota.
+
+## Photo to 3D scene
+
+```bash
+uv run python -m dollhouse.scene PHOTO            # new run in outputs/scene/<timestamp>/
+uv run python -m dollhouse.scene PHOTO --run DIR  # resume a run; --refit redoes only placement
+```
+
+Gemma 4 lists the objects, SAM 3 masks every instance, Depth Anything 3 estimates metric depth,
+Qwen-Image 2.1 extracts each object from a crop with its outline drawn in red (square, 1024 px;
+`--rewrite` expands the prompt with Qwen-Image-2.1-PE-T2I and uses its aspect ratio, but its descriptions
+override what the crop shows), TRELLIS.2 makes a mesh of each, and each mesh is fitted to its object's depth. The result is
+`scene.glb` (Y up, metres, with the photo's camera), and `renders.png` shows it from the photo's camera,
+from the side and from above. Every stage caches its output per object in the run folder. A run takes
+about an hour for ~25 objects and ~200 MB of quota. Don't use the app's Image or 3D tab during a run:
+two copies of Qwen-Image don't fit in RAM.
